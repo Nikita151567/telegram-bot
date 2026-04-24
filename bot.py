@@ -23,7 +23,6 @@ x = symbols('x')
 async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         text = " ".join(context.args).replace(" ", "")
-
         if not text:
             await update.message.reply_text(
                 "📐 *Калькулятор*\n\n"
@@ -34,12 +33,10 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown"
             )
             return
-
         if "=" in text:
             left, right = text.split("=", 1)
             eq = Eq(sympify(left), sympify(right))
             sol = solve(eq, x)
-
             if sol:
                 result = sol[0] if len(sol) == 1 else sol
                 await update.message.reply_text(f"✅ x = {result}")
@@ -48,8 +45,7 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             result = sympify(text)
             await update.message.reply_text(f"✅ Ответ: {result}")
-
-    except Exception as e:
+    except Exception:
         await update.message.reply_text(
             "😅 Ошибка! Проверь формат.\n\n"
             "Примеры:\n"
@@ -81,13 +77,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     token = os.environ.get("BOT_TOKEN")
     if not token:
-token = os.environ.get("8716382261:AAEmj0YgYky5TXrqpI5c-GLM7s6l3Vqqq58")
+        raise ValueError("BOT_TOKEN не задан! Добавь его в Environment на Render.")
     app = ApplicationBuilder().token(token).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("calc", calc))
-
     print("Бот запущен...")
     app.run_polling()
 
