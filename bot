@@ -1,0 +1,44 @@
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from sympy import symbols, Eq, solve, sympify
+
+x = symbols('x')
+
+async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        # берём всё, что после команды
+        text = " ".join(context.args).replace(" ", "")
+
+        if not text:
+            await update.message.reply_text("Напиши так:\n/calc 2*x+3=7\nили\n/calc 5/2+3")
+            return
+
+        # если уравнение
+        if "=" in text:
+            left, right = text.split("=")
+            eq = Eq(sympify(left), sympify(right))
+            sol = solve(eq, x)
+
+            if sol:
+                await update.message.reply_text(f"Ответ: x = {sol}")
+            else:
+                await update.message.reply_text("Нет решений")
+
+        # если просто пример
+        else:
+            result = sympify(text)
+            await update.message.reply_text(f"Ответ: {result}")
+
+    except Exception:
+        await update.message.reply_text("Ошибка 😅 Пример:\n/calc 2*x+3=7\n/calc 5*5")
+
+def main():
+    app = ApplicationBuilder().token("8716382261:AAHtVZtGonSoQsAKAfrA_pX_LCnStDmDW_Q").build()
+
+    app.add_handler(CommandHandler("calc", calc))
+
+    print("Бот работает...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
