@@ -2,15 +2,36 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from sympy import symbols, Eq, solve, sympify
 
+# --- WEB СЕРВЕР (чтобы Render не выключал) ---
+from flask import Flask
+import threading
+
+web_app = Flask(__name__)
+
+@web_app.route('/')
+def home():
+    return "Bot is alive!"
+
+def run_web():
+    web_app.run(host='0.0.0.0', port=10000)
+
+threading.Thread(target=run_web).start()
+# --------------------------------------------
+
 x = symbols('x')
 
+# команда /calc
 async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # берём всё, что после команды
         text = " ".join(context.args).replace(" ", "")
 
         if not text:
-            await update.message.reply_text("Напиши так:\n/calc 2*x+3=7\nили\n/calc 5/2+3")
+            await update.message.reply_text(
+                "Примеры:\n"
+                "/calc 5*5\n"
+                "/calc (5/2)/(2/5)\n"
+                "/calc 2*x+3=7"
+            )
             return
 
         # если уравнение
@@ -20,7 +41,11 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             sol = solve(eq, x)
 
             if sol:
-                await update.message.reply_text(f"Ответ: x = {sol}")
+                # красивый вывод
+                if len(sol) == 1:
+                    await update.message.reply_text(f"x = {sol[0]}")
+                else:
+                    await update.message.reply_text(f"x = {sol}")
             else:
                 await update.message.reply_text("Нет решений")
 
@@ -30,14 +55,19 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"Ответ: {result}")
 
     except Exception:
-        await update.message.reply_text("Ошибка 😅 Пример:\n/calc 2*x+3=7\n/calc 5*5")
+        await update.message.reply_text(
+            "Ошибка 😅\n"
+            "Пример:\n"
+            "/calc 2*x+3=7\n"
+            "/calc 5/2+3"
+        )
 
 def main():
-    app = ApplicationBuilder().token("8716382261:AAHtVZtGonSoQsAKAfrA_pX_LCnStDmDW_Q").build()
+    app = ApplicationBuilder().token("ТВОЙ_ТОКЕН").build()
 
     app.add_handler(CommandHandler("calc", calc))
 
-    print("Бот работает...")
+    print("Бот запущен...")
     app.run_polling()
 
 if __name__ == "__main__":
