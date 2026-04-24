@@ -75,7 +75,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 def main():
-    token = os.environ.get("8716382261:AAGmytsdSxS77Xmys1yJmZIMYasMTzRL9lU")
+    token = os.environ.get("BOT_TOKEN")
     if not token:
         raise ValueError("BOT_TOKEN не задан! Добавь его в Environment на Render.")
     app = ApplicationBuilder().token(token).build()
