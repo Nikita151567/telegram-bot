@@ -1,11 +1,11 @@
+import os
+import threading
+from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from sympy import symbols, Eq, solve, sympify
 
 # --- WEB СЕРВЕР (чтобы Render не выключал) ---
-from flask import Flask
-import threading
-
 web_app = Flask(__name__)
 
 @web_app.route('/')
@@ -15,56 +15,78 @@ def home():
 def run_web():
     web_app.run(host='0.0.0.0', port=10000)
 
-threading.Thread(target=run_web).start()
+threading.Thread(target=run_web, daemon=True).start()
 # --------------------------------------------
 
 x = symbols('x')
 
-# команда /calc
 async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         text = " ".join(context.args).replace(" ", "")
 
         if not text:
             await update.message.reply_text(
+                "📐 *Калькулятор*\n\n"
                 "Примеры:\n"
-                "/calc 5*5\n"
-                "/calc (5/2)/(2/5)\n"
-                "/calc 2*x+3=7"
+                "`/calc 5*5`\n"
+                "`/calc (5/2)/(2/5)`\n"
+                "`/calc 2*x+3=7`",
+                parse_mode="Markdown"
             )
             return
 
-        # если уравнение
         if "=" in text:
-            left, right = text.split("=")
+            left, right = text.split("=", 1)
             eq = Eq(sympify(left), sympify(right))
             sol = solve(eq, x)
 
             if sol:
-                # красивый вывод
-                if len(sol) == 1:
-                    await update.message.reply_text(f"x = {sol[0]}")
-                else:
-                    await update.message.reply_text(f"x = {sol}")
+                result = sol[0] if len(sol) == 1 else sol
+                await update.message.reply_text(f"✅ x = {result}")
             else:
-                await update.message.reply_text("Нет решений")
-
-        # если просто пример
+                await update.message.reply_text("❌ Нет решений")
         else:
             result = sympify(text)
-            await update.message.reply_text(f"Ответ: {result}")
+            await update.message.reply_text(f"✅ Ответ: {result}")
 
-    except Exception:
+    except Exception as e:
         await update.message.reply_text(
-            "Ошибка 😅\n"
-            "Пример:\n"
-            "/calc 2*x+3=7\n"
-            "/calc 5/2+3"
+            "😅 Ошибка! Проверь формат.\n\n"
+            "Примеры:\n"
+            "`/calc 2*x+3=7`\n"
+            "`/calc 5/2+3`",
+            parse_mode="Markdown"
         )
 
-def main():
-    app = ApplicationBuilder().token("8716382261:AAHtVZtGonSoQsAKAfrA_pX_LCnStDmDW_Q").build()
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "👋 Привет! Я математический бот.\n\n"
+        "Команды:\n"
+        "/calc — решить пример или уравнение\n"
+        "/help — помощь"
+    )
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📖 *Помощь*\n\n"
+        "*Примеры:*\n"
+        "`/calc 5*5` → 25\n"
+        "`/calc 10/4` → 2.5\n"
+        "`/calc (5/2)/(2/5)` → 6.25\n"
+        "`/calc 2*x+3=7` → x = 2\n"
+        "`/calc x**2=9` → x = ±3",
+        parse_mode="Markdown"
+    )
+
+def main():
+    token = os.environ.get("BOT_TOKEN")
+    if not token:
+        raise ValueError("BOT_TOKEN не задан! Добавь его в Environment на Render.")
+
+    app = ApplicationBuilder().token(token).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("calc", calc))
 
     print("Бот запущен...")
