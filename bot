@@ -63,7 +63,7 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 def main():
-    app = ApplicationBuilder().token("ТВОЙ_ТОКЕН").build()
+    app = ApplicationBuilder().token("8716382261:AAHtVZtGonSoQsAKAfrA_pX_LCnStDmDW_Q").build()
 
     app.add_handler(CommandHandler("calc", calc))
 
