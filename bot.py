@@ -20,6 +20,31 @@ threading.Thread(target=run_web, daemon=True).start()
 
 x = symbols('x')
 
+def fmt(val):
+    """Форматируем корень красиво"""
+    try:
+        v = complex(val.evalf())
+    except Exception:
+        return str(val)
+
+    real = round(v.real, 4)
+    imag = round(v.imag, 4)
+
+    if abs(imag) < 1e-9:
+        # Чисто действительное
+        return str(int(real)) if real == int(real) else str(real)
+    elif abs(real) < 1e-9:
+        # Чисто мнимое → Xi
+        i = round(abs(imag), 2)
+        i_str = str(int(i)) if i == int(i) else str(i)
+        return f"{i_str}i"
+    else:
+        # Комплексное a±bi
+        r_str = str(int(real)) if real == int(real) else str(round(real, 2))
+        i_str = str(int(abs(imag))) if abs(imag) == int(abs(imag)) else str(round(abs(imag), 2))
+        sign = "+" if imag > 0 else "-"
+        return f"{r_str}{sign}{i_str}i"
+
 def solve_linear_steps(left_expr, right_expr):
     steps = []
     steps.append(f"📋 *Уравнение:* `{left_expr} = {right_expr}`")
@@ -39,49 +64,80 @@ def solve_linear_steps(left_expr, right_expr):
         steps.append(f"➡️ *Переносим {b} вправо:*\n`{a}x = {-b}`")
 
     sol = Rational(-b, a)
-    steps.append(f"➡️ *Делим обе части на {a}:*\n`x = {-b}/{a} = {sol}`")
-    steps.append(f"✅ *Ответ: x = {sol}*")
+    steps.append(f"➡️ *Делим обе части на {a}:*\n`x = {-b}/{a} = {fmt(sol)}`")
+    steps.append(f"✅ *Ответ: x = {fmt(sol)}*")
     return steps, [sol]
 
 def solve_quadratic_steps(left_expr, right_expr):
     steps = []
     steps.append(f"📋 *Уравнение:* `{left_expr} = {right_expr}`")
+
     moved = expand(sympify(left_expr) - sympify(right_expr))
     steps.append(f"➡️ *Переносим всё влево:*\n`{moved} = 0`")
+
     a = moved.coeff(x, 2)
     b = moved.coeff(x, 1)
     c = moved.coeff(x, 0)
+
     steps.append(f"🔍 *Коэффициенты:*\n  a = {a}, b = {b}, c = {c}")
+
     D = b**2 - 4*a*c
     steps.append(
         f"📐 *Дискриминант:*\n"
         f"  D = b² - 4ac = {b}² - 4·{a}·{c} = {b**2} - {4*a*c} = {D}"
     )
+
     if D < 0:
         x1 = simplify((-b + sqrt(D)) / (2*a))
         x2 = simplify((-b - sqrt(D)) / (2*a))
-        steps.append(
-            f"❌ *D < 0 — действительных корней нет*\n\n"
-            f"🔢 *Комплексные корни:*\n"
-            f"  x₁ = {x1}\n"
-            f"  x₂ = {x2}"
-        )
+        f1 = fmt(x1)
+        f2 = fmt(x2)
+        # Если оба чисто мнимые и симметричные → показываем ±
+        v1 = complex(x1.evalf())
+        v2 = complex(x2.evalf())
+        if abs(v1.real) < 1e-9 and abs(v2.real) < 1e-9 and abs(abs(v1.imag) - abs(v2.imag)) < 1e-9:
+            i_val = round(abs(v1.imag), 2)
+            i_str = str(int(i_val)) if i_val == int(i_val) else str(i_val)
+            steps.append(
+                f"❌ *D < 0 — действительных корней нет*\n\n"
+                f"🔢 *Комплексные корни:*\n"
+                f"  x = ±{i_str}i"
+            )
+        else:
+            steps.append(
+                f"❌ *D < 0 — действительных корней нет*\n\n"
+                f"🔢 *Комплексные корни:*\n"
+                f"  x₁ = {f1}\n"
+                f"  x₂ = {f2}"
+            )
         return steps, [x1, x2]
+
     elif D == 0:
-        x1 = Rational(-b, 2*a)
+        x1 = simplify((-b + sqrt(D)) / (2*a))
         steps.append(
             f"✅ *D = 0 — один корень:*\n"
-            f"  x = -b / 2a = {-b} / {2*a} = {x1}"
+            f"  x = -b / 2a = {-b} / {2*a} = {fmt(x1)}"
         )
         return steps, [x1]
+
     else:
         x1 = simplify((-b + sqrt(D)) / (2*a))
         x2 = simplify((-b - sqrt(D)) / (2*a))
-        steps.append(
-            f"✅ *D > 0 — два корня:*\n"
-            f"  x₁ = (-b + √D) / 2a = ({-b} + √{D}) / {2*a} = {x1}\n"
-            f"  x₂ = (-b - √D) / 2a = ({-b} - √{D}) / {2*a} = {x2}"
-        )
+        # Если корни симметричные (b=0) → показываем ±
+        v1 = complex(x1.evalf())
+        v2 = complex(x2.evalf())
+        if abs(v1.real + v2.real) < 1e-9 and abs(v1.imag) < 1e-9:
+            val = fmt(x1)
+            steps.append(
+                f"✅ *D > 0 — два корня:*\n"
+                f"  x = ±{val}"
+            )
+        else:
+            steps.append(
+                f"✅ *D > 0 — два корня:*\n"
+                f"  x₁ = (-b + √D) / 2a = ({-b} + √{D}) / {2*a} = {fmt(x1)}\n"
+                f"  x₂ = (-b - √D) / 2a = ({-b} - √{D}) / {2*a} = {fmt(x2)}"
+            )
         return steps, [x1, x2]
 
 def calc_steps(text):
@@ -137,7 +193,7 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 real_sols = [s for s in raw if im(s) == 0]
                 steps = [f"📋 *Уравнение:* `{left} = {right}`"]
                 if real_sols:
-                    steps.append(f"✅ *Ответ: x = {real_sols if len(real_sols) > 1 else real_sols[0]}*")
+                    steps.append(f"✅ *Ответ: x = {', '.join(fmt(s) for s in real_sols)}*")
                 else:
                     steps.append("❌ *Действительных корней нет*")
                 solutions = real_sols
