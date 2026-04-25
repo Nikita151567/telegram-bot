@@ -3,7 +3,7 @@ import threading
 from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from sympy import symbols, Eq, solve, sympify, factor, expand, Rational, sqrt, simplify
+from sympy import symbols, Eq, solve, sympify, factor, expand, Rational, sqrt, simplify, im
 
 # --- WEB СЕРВЕР ---
 web_app = Flask(__name__)
@@ -21,35 +21,29 @@ threading.Thread(target=run_web, daemon=True).start()
 x = symbols('x')
 
 def solve_linear_steps(left_expr, right_expr):
-    """Шаги для линейного уравнения ax + b = c"""
     steps = []
     steps.append(f"📋 *Уравнение:* `{left_expr} = {right_expr}`")
 
-    # Перенос всего влево: left - right = 0
-    moved = sympify(left_expr) - sympify(right_expr)
-    expanded = expand(moved)
-    steps.append(f"➡️ *Переносим всё влево:*\n`{expanded} = 0`")
+    moved = expand(sympify(left_expr) - sympify(right_expr))
+    steps.append(f"➡️ *Переносим всё влево:*\n`{moved} = 0`")
 
-    # Коэффициенты
-    a = expanded.coeff(x, 1)
-    b = expanded.coeff(x, 0)
+    a = moved.coeff(x, 1)
+    b = moved.coeff(x, 0)
 
     if a == 0:
-        return steps, None  # не линейное
+        return steps, None
 
     steps.append(f"🔍 *Коэффициенты:*\n  a = {a}, b = {b}")
 
     if b != 0:
         steps.append(f"➡️ *Переносим {b} вправо:*\n`{a}x = {-b}`")
 
-    steps.append(f"➡️ *Делим обе части на {a}:*\n`x = {-b}/{a} = {Rational(-b, a)}`")
-
     sol = Rational(-b, a)
+    steps.append(f"➡️ *Делим обе части на {a}:*\n`x = {-b}/{a} = {sol}`")
     steps.append(f"✅ *Ответ: x = {sol}*")
-    return steps, sol
+    return steps, [sol]
 
 def solve_quadratic_steps(left_expr, right_expr):
-    """Шаги для квадратного уравнения"""
     steps = []
     steps.append(f"📋 *Уравнение:* `{left_expr} = {right_expr}`")
 
@@ -63,40 +57,41 @@ def solve_quadratic_steps(left_expr, right_expr):
     steps.append(f"🔍 *Коэффициенты:*\n  a = {a}, b = {b}, c = {c}")
 
     D = b**2 - 4*a*c
-    steps.append(f"📐 *Дискриминант:*\n  D = b² - 4ac = {b}² - 4·{a}·{c} = {b**2} - {4*a*c} = {D}")
+    steps.append(
+        f"📐 *Дискриминант:*\n"
+        f"  D = b² - 4ac = {b}² - 4·{a}·{c} = {b**2} - {4*a*c} = {D}"
+    )
 
     if D < 0:
         steps.append("❌ *D < 0 — действительных корней нет*")
         return steps, []
     elif D == 0:
         x1 = Rational(-b, 2*a)
-        steps.append(f"✅ *D = 0 — один корень:*\n  x = -b / 2a = {-b} / {2*a} = {x1}")
+        steps.append(
+            f"✅ *D = 0 — один корень:*\n"
+            f"  x = -b / 2a = {-b} / {2*a} = {x1}"
+        )
         return steps, [x1]
     else:
-        steps.append(f"✅ *D > 0 — два корня:*")
-        x1 = (-b + sqrt(D)) / (2*a)
-        x2 = (-b - sqrt(D)) / (2*a)
-        x1s = simplify(x1)
-        x2s = simplify(x2)
+        x1 = simplify((-b + sqrt(D)) / (2*a))
+        x2 = simplify((-b - sqrt(D)) / (2*a))
         steps.append(
-            f"  x₁ = (-b + √D) / 2a = ({-b} + √{D}) / {2*a} = {x1s}\n"
-            f"  x₂ = (-b - √D) / 2a = ({-b} - √{D}) / {2*a} = {x2s}"
+            f"✅ *D > 0 — два корня:*\n"
+            f"  x₁ = (-b + √D) / 2a = ({-b} + √{D}) / {2*a} = {x1}\n"
+            f"  x₂ = (-b - √D) / 2a = ({-b} - √{D}) / {2*a} = {x2}"
         )
-        return steps, [x1s, x2s]
+        return steps, [x1, x2]
 
 def calc_steps(text):
-    """Шаги для обычного вычисления"""
     expr = sympify(text)
     steps = []
     steps.append(f"📋 *Выражение:* `{text}`")
 
-    # Показываем упрощённый вид если отличается
     expanded = expand(expr)
     if str(expanded) != str(expr):
         steps.append(f"➡️ *Раскрываем скобки:* `{expanded}`")
 
     result = expr.evalf()
-    # Если результат целый — показываем как целое
     if result == int(result):
         result = int(result)
     else:
@@ -123,31 +118,35 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if "=" in text:
             left, right = text.split("=", 1)
-            left_expr = sympify(left)
-            right_expr = sympify(right)
-            moved = expand(left_expr - right_expr)
+            left_sym = sympify(left)
+            right_sym = sympify(right)
+            moved = expand(left_sym - right_sym)
 
             a2 = moved.coeff(x, 2)
             a1 = moved.coeff(x, 1)
 
             if a2 != 0:
-                # Квадратное уравнение
                 steps, solutions = solve_quadratic_steps(left, right)
             elif a1 != 0:
-                # Линейное уравнение
                 steps, solutions = solve_linear_steps(left, right)
             else:
-                # Другое — общий solve
-                eq = Eq(left_expr, right_expr)
-                sol = solve(eq, x)
+                # Другие уравнения
+                eq = Eq(left_sym, right_sym)
+                raw = solve(eq, x)
+                # Фильтруем комплексные корни
+                real_sols = [s for s in raw if im(s) == 0]
                 steps = [f"📋 *Уравнение:* `{left} = {right}`"]
-                steps.append(f"✅ *Ответ: x = {sol}*")
-                solutions = sol
+                if real_sols:
+                    steps.append(f"✅ *Ответ: x = {real_sols if len(real_sols) > 1 else real_sols[0]}*")
+                else:
+                    steps.append("❌ *Действительных корней нет*")
+                solutions = real_sols
 
             await update.message.reply_text(
                 "\n\n".join(steps),
                 parse_mode="Markdown"
             )
+
         else:
             steps, result = calc_steps(text)
             await update.message.reply_text(
@@ -155,7 +154,7 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown"
             )
 
-    except Exception as e:
+    except Exception:
         await update.message.reply_text(
             "😅 Ошибка! Проверь формат.\n\n"
             "Примеры:\n"
@@ -177,9 +176,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📖 *Помощь*\n\n"
         "*Примеры:*\n"
-        "`/calc 5*5` → покажет шаги вычисления\n"
-        "`/calc 10/4` → покажет шаги\n"
-        "`/calc 2*x+3=7` → линейное уравнение с шагами\n"
+        "`/calc 5*5` → шаги вычисления\n"
+        "`/calc 10/4` → шаги\n"
+        "`/calc 2*x+3=7` → линейное с шагами\n"
         "`/calc x**2-5*x+6=0` → квадратное с дискриминантом\n"
         "`/calc x**2=9` → x = ±3 с шагами",
         parse_mode="Markdown"
