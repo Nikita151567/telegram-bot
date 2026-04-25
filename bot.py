@@ -31,15 +31,12 @@ def fmt(val):
     imag = round(v.imag, 4)
 
     if abs(imag) < 1e-9:
-        # Чисто действительное
         return str(int(real)) if real == int(real) else str(real)
     elif abs(real) < 1e-9:
-        # Чисто мнимое → Xi
         i = round(abs(imag), 2)
         i_str = str(int(i)) if i == int(i) else str(i)
         return f"{i_str}i"
     else:
-        # Комплексное a±bi
         r_str = str(int(real)) if real == int(real) else str(round(real, 2))
         i_str = str(int(abs(imag))) if abs(imag) == int(abs(imag)) else str(round(abs(imag), 2))
         sign = "+" if imag > 0 else "-"
@@ -90,9 +87,6 @@ def solve_quadratic_steps(left_expr, right_expr):
     if D < 0:
         x1 = simplify((-b + sqrt(D)) / (2*a))
         x2 = simplify((-b - sqrt(D)) / (2*a))
-        f1 = fmt(x1)
-        f2 = fmt(x2)
-        # Если оба чисто мнимые и симметричные → показываем ±
         v1 = complex(x1.evalf())
         v2 = complex(x2.evalf())
         if abs(v1.real) < 1e-9 and abs(v2.real) < 1e-9 and abs(abs(v1.imag) - abs(v2.imag)) < 1e-9:
@@ -107,8 +101,8 @@ def solve_quadratic_steps(left_expr, right_expr):
             steps.append(
                 f"❌ *D < 0 — действительных корней нет*\n\n"
                 f"🔢 *Комплексные корни:*\n"
-                f"  x₁ = {f1}\n"
-                f"  x₂ = {f2}"
+                f"  x₁ = {fmt(x1)}\n"
+                f"  x₂ = {fmt(x2)}"
             )
         return steps, [x1, x2]
 
@@ -123,14 +117,12 @@ def solve_quadratic_steps(left_expr, right_expr):
     else:
         x1 = simplify((-b + sqrt(D)) / (2*a))
         x2 = simplify((-b - sqrt(D)) / (2*a))
-        # Если корни симметричные (b=0) → показываем ±
         v1 = complex(x1.evalf())
         v2 = complex(x2.evalf())
         if abs(v1.real + v2.real) < 1e-9 and abs(v1.imag) < 1e-9:
-            val = fmt(x1)
             steps.append(
                 f"✅ *D > 0 — два корня:*\n"
-                f"  x = ±{val}"
+                f"  x = ±{fmt(x1)}"
             )
         else:
             steps.append(
@@ -189,14 +181,28 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 steps, solutions = solve_linear_steps(left, right)
             else:
                 eq = Eq(left_sym, right_sym)
-                raw = solve(eq, x)
-                real_sols = [s for s in raw if im(s) == 0]
+                free_vars = eq.free_symbols
                 steps = [f"📋 *Уравнение:* `{left} = {right}`"]
-                if real_sols:
-                    steps.append(f"✅ *Ответ: x = {', '.join(fmt(s) for s in real_sols)}*")
+
+                if len(free_vars) > 1:
+                    # Несколько переменных — решаем относительно x
+                    raw = solve(eq, x)
+                    if raw:
+                        steps.append(f"🔍 *Несколько переменных, решаем относительно x:*")
+                        for i, s in enumerate(raw):
+                            sub = '₁₂₃₄'[i] if len(raw) > 1 else ''
+                            steps.append(f"  x{sub} = {s}")
+                    else:
+                        steps.append("❌ *Не удалось решить относительно x*")
+                    solutions = raw if raw else []
                 else:
-                    steps.append("❌ *Действительных корней нет*")
-                solutions = real_sols
+                    raw = solve(eq, x)
+                    real_sols = [s for s in raw if im(s) == 0]
+                    if real_sols:
+                        steps.append(f"✅ *Ответ: x = {', '.join(fmt(s) for s in real_sols)}*")
+                    else:
+                        steps.append("❌ *Действительных корней нет*")
+                    solutions = real_sols
 
             await update.message.reply_text(
                 "\n\n".join(steps),
