@@ -19,8 +19,6 @@ threading.Thread(target=run_web, daemon=True).start()
 # ------------------
 
 x = symbols('x')
-
-# Хранилище переменных для каждого пользователя
 user_vars = {}
 
 def fmt(val):
@@ -28,10 +26,8 @@ def fmt(val):
         v = complex(val.evalf())
     except Exception:
         return str(val)
-
     real = round(v.real, 4)
     imag = round(v.imag, 4)
-
     if abs(imag) < 1e-9:
         return str(int(real)) if real == int(real) else str(real)
     elif abs(real) < 1e-9:
@@ -44,24 +40,22 @@ def fmt(val):
         sign = "+" if imag > 0 else "-"
         return f"{r_str}{sign}{i_str}i"
 
+def preprocess(text):
+    """Заменяем математические символы на sympy-совместимые"""
+    return text.replace("√", "sqrt").replace("^", "**")
+
 def solve_linear_steps(left_expr, right_expr):
     steps = []
     steps.append(f"📋 *Уравнение:* `{left_expr} = {right_expr}`")
-
     moved = expand(sympify(left_expr) - sympify(right_expr))
     steps.append(f"➡️ *Переносим всё влево:*\n`{moved} = 0`")
-
     a = moved.coeff(x, 1)
     b = moved.coeff(x, 0)
-
     if a == 0:
         return steps, None
-
     steps.append(f"🔍 *Коэффициенты:*\n  a = {a}, b = {b}")
-
     if b != 0:
         steps.append(f"➡️ *Переносим {b} вправо:*\n`{a}x = {-b}`")
-
     sol = Rational(-b, a)
     steps.append(f"➡️ *Делим обе части на {a}:*\n`x = {-b}/{a} = {fmt(sol)}`")
     steps.append(f"✅ *Ответ: x = {fmt(sol)}*")
@@ -70,22 +64,17 @@ def solve_linear_steps(left_expr, right_expr):
 def solve_quadratic_steps(left_expr, right_expr):
     steps = []
     steps.append(f"📋 *Уравнение:* `{left_expr} = {right_expr}`")
-
     moved = expand(sympify(left_expr) - sympify(right_expr))
     steps.append(f"➡️ *Переносим всё влево:*\n`{moved} = 0`")
-
     a = moved.coeff(x, 2)
     b = moved.coeff(x, 1)
     c = moved.coeff(x, 0)
-
     steps.append(f"🔍 *Коэффициенты:*\n  a = {a}, b = {b}, c = {c}")
-
     D = b**2 - 4*a*c
     steps.append(
         f"📐 *Дискриминант:*\n"
         f"  D = b² - 4ac = {b}² - 4·{a}·{c} = {b**2} - {4*a*c} = {D}"
     )
-
     if D < 0:
         x1 = simplify((-b + sqrt(D)) / (2*a))
         x2 = simplify((-b - sqrt(D)) / (2*a))
@@ -107,7 +96,6 @@ def solve_quadratic_steps(left_expr, right_expr):
                 f"  x₂ = {fmt(x2)}"
             )
         return steps, [x1, x2]
-
     elif D == 0:
         x1 = simplify((-b + sqrt(D)) / (2*a))
         steps.append(
@@ -115,7 +103,6 @@ def solve_quadratic_steps(left_expr, right_expr):
             f"  x = -b / 2a = {-b} / {2*a} = {fmt(x1)}"
         )
         return steps, [x1]
-
     else:
         x1 = simplify((-b + sqrt(D)) / (2*a))
         x2 = simplify((-b - sqrt(D)) / (2*a))
@@ -138,17 +125,14 @@ def calc_steps(text):
     expr = sympify(text)
     steps = []
     steps.append(f"📋 *Выражение:* `{text}`")
-
     expanded = expand(expr)
     if str(expanded) != str(expr):
         steps.append(f"➡️ *Раскрываем скобки:* `{expanded}`")
-
     result = expr.evalf()
     if result == int(result):
         result = int(result)
     else:
         result = float(round(float(result), 6))
-
     steps.append(f"➡️ *Вычисляем:* `{result}`")
     steps.append(f"✅ *Ответ: {result}*")
     return steps, result
@@ -158,15 +142,14 @@ async def setvar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
             "📦 *Использование:*\n"
-            "`/setvar y=2` — задать переменную для следующего /calc\n"
-            "`/setvar y=2 z=5` — несколько переменных",
+            "`/setvar y=2` — задать переменную\n"
+            "`/setvar y=2 z=5` — несколько переменных\n"
+            "`/unsetvar` — сбросить все переменные",
             parse_mode="Markdown"
         )
         return
-
-    text = " ".join(context.args)
-    user_vars[user_id] = {}  # сбрасываем старые
-
+    text = preprocess(" ".join(context.args))
+    user_vars[user_id] = {}
     assigned = []
     for part in text.split():
         if "=" in part:
@@ -185,46 +168,51 @@ async def setvar(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown"
             )
             return
-
     lines = "\n".join(f"  {a}" for a in assigned)
     await update.message.reply_text(
-        f"✅ *Сохранено для следующего /calc:*\n{lines}",
+        f"✅ *Сохранено:*\n{lines}",
         parse_mode="Markdown"
     )
+
+async def unsetvar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id in user_vars and user_vars[user_id]:
+        old = ", ".join(f"{k}={v}" for k, v in user_vars[user_id].items())
+        user_vars.pop(user_id)
+        await update.message.reply_text(
+            f"🗑️ *Переменные сброшены:*\n  {old}",
+            parse_mode="Markdown"
+        )
+    else:
+        await update.message.reply_text("ℹ️ Нет сохранённых переменных.")
 
 async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     try:
-        text = " ".join(context.args).replace(" ", "")
+        text = preprocess(" ".join(context.args).replace(" ", ""))
         if not text:
             await update.message.reply_text(
                 "📐 *Калькулятор*\n\n"
                 "Примеры:\n"
                 "`/calc 5*5`\n"
+                "`/calc √25`\n"
                 "`/calc 2*x+3=7`\n"
-                "`/calc x**2-5*x+6=0`\n\n"
-                "Если уравнение с несколькими переменными:\n"
-                "`/setvar y=2` → потом `/calc x**3/y=10`",
+                "`/calc x**2-5*x+6=0`\n"
+                "`/calc x*x/(24+9)+√25`",
                 parse_mode="Markdown"
             )
             return
-
-        # Берём переменные и сразу удаляем — работают только один раз
         saved = user_vars.pop(user_id, {})
-
         if "=" in text:
             left, right = text.split("=", 1)
             left_sym = sympify(left).subs(saved)
             right_sym = sympify(right).subs(saved)
             moved = expand(left_sym - right_sym)
-
             sub_note = ""
             if saved:
                 sub_note = ", ".join(f"{k}={v}" for k, v in saved.items())
-
             a2 = moved.coeff(x, 2)
             a1 = moved.coeff(x, 1)
-
             if a2 != 0:
                 steps, solutions = solve_quadratic_steps(str(left_sym), str(right_sym))
             elif a1 != 0:
@@ -235,7 +223,6 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 steps = [f"📋 *Уравнение:* `{left} = {right}`"]
                 if sub_note:
                     steps.append(f"🔧 *Подставлено:* {sub_note}")
-
                 if len(free_vars) > 1:
                     raw = solve(eq, x)
                     if raw:
@@ -254,15 +241,12 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     else:
                         steps.append("❌ *Действительных корней нет*")
                     solutions = real_sols
-
             if sub_note and (a2 != 0 or a1 != 0):
                 steps.insert(1, f"🔧 *Подставлено:* {sub_note}")
-
             await update.message.reply_text(
                 "\n\n".join(steps),
                 parse_mode="Markdown"
             )
-
         else:
             expr_sym = sympify(text).subs(saved)
             steps, result = calc_steps(str(expr_sym))
@@ -270,14 +254,13 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "\n\n".join(steps),
                 parse_mode="Markdown"
             )
-
     except Exception:
         await update.message.reply_text(
             "😅 Ошибка! Проверь формат.\n\n"
             "Примеры:\n"
             "`/calc 2*x+3=7`\n"
-            "`/calc x**2-5*x+6=0`\n"
-            "`/setvar y=2` → `/calc x**3/y=10`",
+            "`/calc √25`\n"
+            "`/calc x*x/(24+9)+√25`",
             parse_mode="Markdown"
         )
 
@@ -286,7 +269,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👋 Привет! Я математический бот.\n\n"
         "Команды:\n"
         "/calc — решить пример или уравнение с шагами\n"
-        "/setvar — задать переменные для следующего /calc\n"
+        "/setvar — задать переменные\n"
+        "/unsetvar — сбросить переменные\n"
         "/help — помощь"
     )
 
@@ -295,15 +279,15 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📖 *Помощь*\n\n"
         "*Обычные примеры:*\n"
         "`/calc 5*5` → 25\n"
+        "`/calc √25` → 5\n"
         "`/calc 10/4` → 2.5\n\n"
         "*Уравнения:*\n"
         "`/calc 2*x+3=7` → x = 2\n"
         "`/calc x**2-5*x+6=0` → x = 2, 3\n"
         "`/calc x**2=9` → x = ±3\n\n"
-        "*Несколько переменных:*\n"
-        "`/setvar y=2` — задать y только для следующего /calc\n"
-        "`/setvar y=2 z=5` — несколько переменных\n"
-        "Потом: `/calc x**3/y=10`",
+        "*Переменные:*\n"
+        "`/setvar y=2` → потом `/calc x**3/y=10`\n"
+        "`/unsetvar` — сбросить переменные",
         parse_mode="Markdown"
     )
 
@@ -316,6 +300,7 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("calc", calc))
     app.add_handler(CommandHandler("setvar", setvar))
+    app.add_handler(CommandHandler("unsetvar", unsetvar))
     print("Бот запущен...")
     app.run_polling()
 
