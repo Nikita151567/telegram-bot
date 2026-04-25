@@ -3,7 +3,7 @@ import threading
 from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from sympy import symbols, Eq, solve, sympify, factor, expand, Rational, sqrt, simplify, im
+from sympy import symbols, Eq, solve, sympify, expand, Rational, sqrt, simplify, im
 
 # --- WEB СЕРВЕР ---
 web_app = Flask(__name__)
@@ -46,25 +46,27 @@ def solve_linear_steps(left_expr, right_expr):
 def solve_quadratic_steps(left_expr, right_expr):
     steps = []
     steps.append(f"📋 *Уравнение:* `{left_expr} = {right_expr}`")
-
     moved = expand(sympify(left_expr) - sympify(right_expr))
     steps.append(f"➡️ *Переносим всё влево:*\n`{moved} = 0`")
-
     a = moved.coeff(x, 2)
     b = moved.coeff(x, 1)
     c = moved.coeff(x, 0)
-
     steps.append(f"🔍 *Коэффициенты:*\n  a = {a}, b = {b}, c = {c}")
-
     D = b**2 - 4*a*c
     steps.append(
         f"📐 *Дискриминант:*\n"
         f"  D = b² - 4ac = {b}² - 4·{a}·{c} = {b**2} - {4*a*c} = {D}"
     )
-
     if D < 0:
-        steps.append("❌ *D < 0 — действительных корней нет*")
-        return steps, []
+        x1 = simplify((-b + sqrt(D)) / (2*a))
+        x2 = simplify((-b - sqrt(D)) / (2*a))
+        steps.append(
+            f"❌ *D < 0 — действительных корней нет*\n\n"
+            f"🔢 *Комплексные корни:*\n"
+            f"  x₁ = {x1}\n"
+            f"  x₂ = {x2}"
+        )
+        return steps, [x1, x2]
     elif D == 0:
         x1 = Rational(-b, 2*a)
         steps.append(
@@ -130,10 +132,8 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif a1 != 0:
                 steps, solutions = solve_linear_steps(left, right)
             else:
-                # Другие уравнения
                 eq = Eq(left_sym, right_sym)
                 raw = solve(eq, x)
-                # Фильтруем комплексные корни
                 real_sols = [s for s in raw if im(s) == 0]
                 steps = [f"📋 *Уравнение:* `{left} = {right}`"]
                 if real_sols:
