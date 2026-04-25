@@ -156,34 +156,16 @@ def calc_steps(text):
 async def setvar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not context.args:
-        # Показать текущие переменные
-        vars_now = user_vars.get(user_id, {})
-        if vars_now:
-            lines = "\n".join(f"  {k} = {v}" for k, v in vars_now.items())
-            await update.message.reply_text(
-                f"📦 *Текущие переменные:*\n{lines}\n\n"
-                f"Чтобы сбросить: `/setvar clear`",
-                parse_mode="Markdown"
-            )
-        else:
-            await update.message.reply_text(
-                "📦 *Переменных нет*\n\n"
-                "Пример: `/setvar y=2` или `/setvar y=2 z=5`",
-                parse_mode="Markdown"
-            )
+        await update.message.reply_text(
+            "📦 *Использование:*\n"
+            "`/setvar y=2` — задать переменную для следующего /calc\n"
+            "`/setvar y=2 z=5` — несколько переменных",
+            parse_mode="Markdown"
+        )
         return
 
     text = " ".join(context.args)
-
-    # Сброс
-    if text.strip().lower() == "clear":
-        user_vars[user_id] = {}
-        await update.message.reply_text("🗑️ *Все переменные сброшены*", parse_mode="Markdown")
-        return
-
-    # Парсим y=2 z=5 ...
-    if user_id not in user_vars:
-        user_vars[user_id] = {}
+    user_vars[user_id] = {}  # сбрасываем старые
 
     assigned = []
     for part in text.split():
@@ -206,8 +188,7 @@ async def setvar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lines = "\n".join(f"  {a}" for a in assigned)
     await update.message.reply_text(
-        f"✅ *Сохранено:*\n{lines}\n\n"
-        f"Теперь используй `/calc` — переменные подставятся автоматически.",
+        f"✅ *Сохранено для следующего /calc:*\n{lines}",
         parse_mode="Markdown"
     )
 
@@ -228,8 +209,8 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Подставляем сохранённые переменные
-        saved = user_vars.get(user_id, {})
+        # Берём переменные и сразу удаляем — работают только один раз
+        saved = user_vars.pop(user_id, {})
 
         if "=" in text:
             left, right = text.split("=", 1)
@@ -237,7 +218,6 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             right_sym = sympify(right).subs(saved)
             moved = expand(left_sym - right_sym)
 
-            # Показываем какие переменные подставили
             sub_note = ""
             if saved:
                 sub_note = ", ".join(f"{k}={v}" for k, v in saved.items())
@@ -275,8 +255,7 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         steps.append("❌ *Действительных корней нет*")
                     solutions = real_sols
 
-            # Добавляем заметку о подстановке в начало если надо
-            if sub_note and a2 != 0 or sub_note and a1 != 0:
+            if sub_note and (a2 != 0 or a1 != 0):
                 steps.insert(1, f"🔧 *Подставлено:* {sub_note}")
 
             await update.message.reply_text(
@@ -307,7 +286,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👋 Привет! Я математический бот.\n\n"
         "Команды:\n"
         "/calc — решить пример или уравнение с шагами\n"
-        "/setvar — задать переменные (например y=2)\n"
+        "/setvar — задать переменные для следующего /calc\n"
         "/help — помощь"
     )
 
@@ -322,10 +301,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "`/calc x**2-5*x+6=0` → x = 2, 3\n"
         "`/calc x**2=9` → x = ±3\n\n"
         "*Несколько переменных:*\n"
-        "`/setvar y=2` — задать y\n"
-        "`/setvar y=2 z=5` — задать сразу несколько\n"
-        "`/setvar` — посмотреть текущие\n"
-        "`/setvar clear` — сбросить все\n"
+        "`/setvar y=2` — задать y только для следующего /calc\n"
+        "`/setvar y=2 z=5` — несколько переменных\n"
         "Потом: `/calc x**3/y=10`",
         parse_mode="Markdown"
     )
