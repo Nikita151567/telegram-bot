@@ -45,6 +45,7 @@ def preprocess(text):
     text = text.replace("^", "**")
     text = re.sub(r'√(\d+\.?\d*)', r'sqrt(\1)', text)
     text = re.sub(r'√\(', r'sqrt(', text)
+    text = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', text)
     return text
 
 def solve_linear_steps(left_expr, right_expr):
@@ -126,19 +127,28 @@ def solve_quadratic_steps(left_expr, right_expr):
 
 def calc_steps(text):
     expr = sympify(text)
+    free = expr.free_symbols
     steps = []
     steps.append(f"📋 *Выражение:* `{text}`")
-    expanded = expand(expr)
-    if str(expanded) != str(expr):
-        steps.append(f"➡️ *Раскрываем скобки:* `{expanded}`")
-    result = expr.evalf()
-    if result == int(result):
-        result = int(result)
+
+    if free:
+        # Есть переменные — упрощаем
+        simplified = expand(expr)
+        steps.append(f"✅ *Упрощено:* `{simplified}`")
+        return steps, simplified
     else:
-        result = float(round(float(result), 6))
-    steps.append(f"➡️ *Вычисляем:* `{result}`")
-    steps.append(f"✅ *Ответ: {result}*")
-    return steps, result
+        # Числовое выражение — вычисляем
+        expanded = expand(expr)
+        if str(expanded) != str(expr):
+            steps.append(f"➡️ *Раскрываем скобки:* `{expanded}`")
+        result = expr.evalf()
+        if result == int(result):
+            result = int(result)
+        else:
+            result = float(round(float(result), 6))
+        steps.append(f"➡️ *Вычисляем:* `{result}`")
+        steps.append(f"✅ *Ответ: {result}*")
+        return steps, result
 
 async def setvar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
