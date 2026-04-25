@@ -1,4 +1,5 @@
 import os
+import re
 import threading
 from flask import Flask
 from telegram import Update
@@ -41,8 +42,10 @@ def fmt(val):
         return f"{r_str}{sign}{i_str}i"
 
 def preprocess(text):
-    """Заменяем математические символы на sympy-совместимые"""
-    return text.replace("√", "sqrt").replace("^", "**")
+    text = text.replace("^", "**")
+    text = re.sub(r'√(\d+\.?\d*)', r'sqrt(\1)', text)
+    text = re.sub(r'√\(', r'sqrt(', text)
+    return text
 
 def solve_linear_steps(left_expr, right_expr):
     steps = []
@@ -196,9 +199,9 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Примеры:\n"
                 "`/calc 5*5`\n"
                 "`/calc √25`\n"
+                "`/calc x*x/(24+9)+√25`\n"
                 "`/calc 2*x+3=7`\n"
-                "`/calc x**2-5*x+6=0`\n"
-                "`/calc x*x/(24+9)+√25`",
+                "`/calc x**2-5*x+6=0`",
                 parse_mode="Markdown"
             )
             return
@@ -280,6 +283,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "*Обычные примеры:*\n"
         "`/calc 5*5` → 25\n"
         "`/calc √25` → 5\n"
+        "`/calc x*x/(24+9)+√25` → x²/33 + 5\n"
         "`/calc 10/4` → 2.5\n\n"
         "*Уравнения:*\n"
         "`/calc 2*x+3=7` → x = 2\n"
