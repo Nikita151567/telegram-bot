@@ -45,6 +45,7 @@ def preprocess(text):
     text = text.replace("^", "**")
     text = re.sub(r'√(\d+\.?\d*)', r'sqrt(\1)', text)
     text = re.sub(r'√\(', r'sqrt(', text)
+    text = re.sub(r'√([a-zA-Z])', r'sqrt(\1)', text)
     text = re.sub(r'(\d)([a-zA-Z])', r'\1*\2', text)
     return text
 
@@ -130,14 +131,11 @@ def calc_steps(text):
     free = expr.free_symbols
     steps = []
     steps.append(f"📋 *Выражение:* `{text}`")
-
     if free:
-        # Есть переменные — упрощаем
         simplified = expand(expr)
         steps.append(f"✅ *Упрощено:* `{simplified}`")
         return steps, simplified
     else:
-        # Числовое выражение — вычисляем
         expanded = expand(expr)
         if str(expanded) != str(expr):
             steps.append(f"➡️ *Раскрываем скобки:* `{expanded}`")
@@ -209,6 +207,7 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Примеры:\n"
                 "`/calc 5*5`\n"
                 "`/calc √25`\n"
+                "`/calc √x=25`\n"
                 "`/calc x*x/(24+9)+√25`\n"
                 "`/calc 2*x+3=7`\n"
                 "`/calc x**2-5*x+6=0`",
@@ -231,29 +230,26 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             elif a1 != 0:
                 steps, solutions = solve_linear_steps(str(left_sym), str(right_sym))
             else:
+                # Общий случай — sqrt(x), кубические и др.
                 eq = Eq(left_sym, right_sym)
-                free_vars = eq.free_symbols
                 steps = [f"📋 *Уравнение:* `{left} = {right}`"]
                 if sub_note:
                     steps.append(f"🔧 *Подставлено:* {sub_note}")
-                if len(free_vars) > 1:
-                    raw = solve(eq, x)
-                    if raw:
-                        steps.append("🔍 *Несколько переменных, решаем относительно x:*")
-                        for i, s in enumerate(raw):
-                            sub = '₁₂₃₄'[i] if len(raw) > 1 else ''
-                            steps.append(f"  x{sub} = {s}")
+                raw = solve(eq, x)
+                real_sols = [s for s in raw if im(s.evalf()) == 0]
+                if real_sols:
+                    if len(real_sols) == 1:
+                        steps.append(f"✅ *Ответ: x = {fmt(real_sols[0])}*")
                     else:
-                        steps.append("❌ *Не удалось решить относительно x*")
-                    solutions = raw if raw else []
+                        answers = ', '.join(fmt(s) for s in real_sols)
+                        steps.append(f"✅ *Ответ: x = {answers}*")
+                elif raw:
+                    steps.append("❌ *Действительных корней нет*\n\n🔢 *Комплексные корни:*")
+                    for s in raw:
+                        steps.append(f"  x = {fmt(s)}")
                 else:
-                    raw = solve(eq, x)
-                    real_sols = [s for s in raw if im(s) == 0]
-                    if real_sols:
-                        steps.append(f"✅ *Ответ: x = {', '.join(fmt(s) for s in real_sols)}*")
-                    else:
-                        steps.append("❌ *Действительных корней нет*")
-                    solutions = real_sols
+                    steps.append("❌ *Корней нет*")
+                solutions = real_sols
             if sub_note and (a2 != 0 or a1 != 0):
                 steps.insert(1, f"🔧 *Подставлено:* {sub_note}")
             await update.message.reply_text(
@@ -273,7 +269,7 @@ async def calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Примеры:\n"
             "`/calc 2*x+3=7`\n"
             "`/calc √25`\n"
-            "`/calc x*x/(24+9)+√25`",
+            "`/calc √x=25`",
             parse_mode="Markdown"
         )
 
@@ -293,12 +289,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "*Обычные примеры:*\n"
         "`/calc 5*5` → 25\n"
         "`/calc √25` → 5\n"
-        "`/calc x*x/(24+9)+√25` → x²/33 + 5\n"
         "`/calc 10/4` → 2.5\n\n"
         "*Уравнения:*\n"
         "`/calc 2*x+3=7` → x = 2\n"
         "`/calc x**2-5*x+6=0` → x = 2, 3\n"
-        "`/calc x**2=9` → x = ±3\n\n"
+        "`/calc x**2=9` → x = ±3\n"
+        "`/calc √x=25` → x = 625\n\n"
         "*Переменные:*\n"
         "`/setvar y=2` → потом `/calc x**3/y=10`\n"
         "`/unsetvar` — сбросить переменные",
